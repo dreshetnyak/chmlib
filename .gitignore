@@ -1,3 +1,6 @@
 obj/
 *.bz2
 afl_findings_dir/
+x64/
+other/
+.vs/
