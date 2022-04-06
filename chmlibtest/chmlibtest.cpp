@@ -22,16 +22,18 @@ bool TryGetCoverBitmap(IStream* stream, HBITMAP& outBitmap, WTS_ALPHATYPE& outAl
 bool TryReadFile(chm_file& chmFile, chm_entry& fileEntry, vector<char>& outFileContent);
 bool TryLoadBitmap(const vector<char>& coverImage, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType);
 bool TryGetCoverFromToc(chm_file& chmFile, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType);
-bool TryGetFileContent(chm_file& chmFile, int& fileIndex, vector<char>& outFileContent, const function<bool(const string&)>& pathMatch);
 bool TryGetCoverBitmap(chm_file& chmFile, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType, const function<bool(const string&)>& pathMatch);
-bool TryGetCoverBitmap(IStream* stream, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType);
 bool TryGetCoverFromImageTag(chm_file& chmFile, const Xml::Document& xml, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType);
 bool TryGetCoverByHtmlPath(chm_file& chmFile, const string& htmlFilePath, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType);
-
-bool TryGetPathFromHhcObjects(chm_file& chmFile, const Xml::Document& hhcXml, const function<bool(const string&)>& isParamTagIndicatesCoverObject, const function<bool(const string&)>& isParamTagWithCoverPath, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType);
+bool TryGetPathFromHhcObjects(chm_file& chmFile, const Xml::Document& hhcXml, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType);
 bool TryGetPathFromHhcObject(chm_file& chmFile, const Xml::Document& hhcObjectXml, const function<bool(const string&)>& isParamTagIndicatesCoverObject, const function<bool(const string&)>& isParamTagWithCoverPath, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType);
 bool TryGetCoverFromHhc(chm_file& chmFile, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType);
 void PreparePath(string& path);
+bool TryGetCoverFromFirstHtml(chm_file& chmFile, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType);
+bool TryGetCoverByFileName(chm_file& chmFile, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType);
+bool TryGetFileEndsWithContent(chm_file& chmFile, int& fileIndex, vector<char>& outFileContent, const string& endsWith);
+bool TryGetFileMatchContent(chm_file& chmFile, int& fileIndex, vector<char>& outFileContent, const function<bool(const string&)>& pathMatch);
+bool TryGetCoverFromHtml(chm_file& chmFile, const vector<string>& endsWithStrings, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType);
 
 vector<string> ImageFileExtensions
 {
@@ -50,7 +52,8 @@ vector<string> ImageFileExtensions
 vector<string> HtmlExtensions
 {
     ".html",
-    ".htm"
+    ".htm",
+    ".shtml"
 };
 
 vector<string> TocFileNames
@@ -63,8 +66,31 @@ vector<string> OtherTocFileNames
 {
     "cover.html",
     "cover.htm",
+    "content.html",
+    "content.htm",
     "index.html",
-    "index.htm",
+    "index.htm"
+};
+
+vector<string> CoverImageFileEnds
+{
+    "_xs",
+    "/cover",
+    "/cover_01"
+};
+
+vector<string> CoverImageFileNotEnds
+{
+    "next",
+    "previous",
+    "top",
+    "bottom",
+    "_logo"
+};
+
+vector<string> CoverImageFileContains
+{
+    "cover"
 };
 
 int main()
@@ -76,10 +102,13 @@ int main()
 
     string coverFileName{};
     vector<char> coverFileContent{};
-    //const auto searchPath{ "C:\\TEMP\\CHM1" };
-    //const auto imagePath{ L"C:\\TEMP\\CHM1\\IMG" };
-    const auto searchPath{ "R:\\TEMP\\CHM" };
+#ifdef _DEBUG
+    const auto searchPath{ "C:\\TEMP\\CHM1" };
+    const auto imagePath{ L"C:\\TEMP\\CHM1\\IMG" };
+#else
+	const auto searchPath{ "R:\\TEMP\\CHM" };
     const auto imagePath{ L"R:\\TEMP\\IMG" };
+#endif
     for (const auto& entry : filesystem::directory_iterator(searchPath))
     {
         if (entry.is_directory())
@@ -88,18 +117,19 @@ int main()
         const filesystem::path::value_type* filePath = entry.path().c_str();
     	if (!StrLib::EndsWith(wstring{ filePath }, wstring{L".chm"}))
             continue;
-        
+
+        std::wcout << L"[->]: " << filePath;
+
         IStream* fileStream{ nullptr };
         if (const auto result = SHCreateStreamOnFileW(filePath, STGM_READ | STGM_SHARE_DENY_WRITE, &fileStream); FAILED(result))
         {
-            std::wcout << L"ST: " << filePath << endl;
+            std::wcout << L"\r[ST]: " << filePath << endl;
             continue;
         }
 
         if (!TryGetCoverBitmap(fileStream, bitmap, alphaType))
         {
-            std::wcout << L"NK: " << filePath << endl;
-            //std::wcout << L"Failed get the cover for: " << filePath << endl;
+            std::wcout << L"\r[NK]: " << filePath << endl;
             continue;
         }
 
@@ -111,30 +141,11 @@ int main()
             std::wcout << L"Failed to save: " << imageFileName << endl;        
         
         DeleteObject(bitmap);
-
-        std::wcout << L"OK: " << filePath << endl;
-        //std::wcout << L"Cover obtained for: " << filePath << endl;
-        //std::wcout << filePath << endl;
-
-        //fileStream->Release();
+        std::wcout << L"\r[OK]: " << filePath << endl;
     }
 
-    //parsingResult = extract(&chmFile, base_path);
-    //chm_close(&chmFile);
-    //fd_reader_close(&ctx);
-    //std::cout << "Path: '" << entry->path << "';" << " Length: " << entry->length << "; Space: " << entry->space << "; Flags: " << entry->flags << std::endl;
-
-    
-    
     CoUninitialize();
-    
-    //return !chmFile->parse_entries_failed;
-
-    //printf("%s:\n", path);
-    //parsingResult = extract(&chmFile, base_path);
-    //chm_close(&chmFile);
-    //fd_reader_close(&ctx);
-    
+   
     std::cout << "Done.\n";
     return 0;
 }
@@ -158,6 +169,13 @@ bool TryGetCoverBitmap(IStream *stream, HBITMAP& outBitmap, WTS_ALPHATYPE& outAl
     if (TryGetCoverFromHhc(chmFile, outBitmap, outAlphaType))
         return true;
 
+    // Try to get image that contains 'cover'
+    if (TryGetCoverByFileName(chmFile, outBitmap, outAlphaType))
+        return true;
+    
+    if (TryGetCoverFromFirstHtml(chmFile, outBitmap, outAlphaType))
+        return true;
+
     return false;
 }
 
@@ -167,36 +185,48 @@ bool TryGetCoverFromXsFile(chm_file& chmFile, HBITMAP& outBitmap, WTS_ALPHATYPE&
     {
         if (!StrLib::EndsWith(path, ImageFileExtensions))
             return false;
-        const auto extensionOffset = path.find_last_of('.');
-        const auto pathWithoutExtension = extensionOffset != string::npos ? path.substr(0, extensionOffset) : path;
-        return StrLib::EndsWith(pathWithoutExtension, std::string{ "_xs" });
+        const auto pathWithoutExtension = Utility::TrimPathExtension(path);
+        return !StrLib::EndsWith(pathWithoutExtension, CoverImageFileNotEnds) && StrLib::EndsWith(pathWithoutExtension, CoverImageFileEnds);
     });
 }
 
 bool TryGetCoverFromToc(chm_file& chmFile, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType)
 {
-    int fileIndex{ 0 };
-    vector<char> tocFileContent{};
-
-    if (!TryGetFileContent(chmFile, fileIndex, tocFileContent, [&](const string& path) -> bool { return StrLib::EndsWith(path, TocFileNames); }) &&
-        !TryGetFileContent(chmFile, fileIndex, tocFileContent, [&](const string& path) -> bool { return StrLib::EndsWith(path, OtherTocFileNames); }))
-        return false;
-
-    const Xml::Document tocXml{ string {tocFileContent} };
-    tocFileContent.clear();
-
-    return TryGetCoverFromImageTag(chmFile, tocXml, outBitmap, outAlphaType);
+    return TryGetCoverFromHtml(chmFile, TocFileNames, outBitmap, outAlphaType) ||
+        TryGetCoverFromHtml(chmFile, OtherTocFileNames, outBitmap, outAlphaType);
 }
 
 bool TryGetCoverFromHhc(chm_file& chmFile, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType)
 {
 	const string hhcExtension{ ".hhc" };
+    vector<char> hhcFileContent{};
+    for (int fileIndex{ 0 }; TryGetFileEndsWithContent(chmFile, fileIndex, hhcFileContent, hhcExtension); ++fileIndex)
+    {
+        const Xml::Document hhcXml{ string {hhcFileContent} };
+        hhcFileContent.clear();
+        if (TryGetPathFromHhcObjects(chmFile, hhcXml, outBitmap, outAlphaType))
+			return true;        
+    }
 
+    return false;
+}
+
+bool TryGetPathFromHhcObjects(chm_file& chmFile, const Xml::Document& hhcXml, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType)
+{
     auto isParamTagIndicatesNameObject = [](const string& paramTag) -> bool
     {
         string attributeValue{};
         return Xml::Document::GetTagAttribute(paramTag, "name", attributeValue) &&
             StrLib::EqualsCi(attributeValue, string{ "Name" });
+    };
+
+    auto isParamTagIndicatesCoverObject = [](const string& paramTag) -> bool
+    {
+        string attributeValue{};
+        return Xml::Document::GetTagAttribute(paramTag, "name", attributeValue) &&
+            StrLib::EqualsCi(attributeValue, string{ "Name" }) &&
+            Xml::Document::GetTagAttribute(paramTag, "value", attributeValue) &&
+            StrLib::EqualsCi(attributeValue, string{ "Cover" });
     };
 
     auto isParamTagWithCoverPath = [](const string& paramTag) -> bool
@@ -206,30 +236,13 @@ bool TryGetCoverFromHhc(chm_file& chmFile, HBITMAP& outBitmap, WTS_ALPHATYPE& ou
             StrLib::EqualsCi(attributeValue, string{ "Local" });
     };
 
-    vector<char> hhcFileContent{};
-    for (int fileIndex{ 0 }; TryGetFileContent(chmFile, fileIndex, hhcFileContent, [&](const string& path) -> bool { return StrLib::EndsWith(path, hhcExtension); }); ++fileIndex)
-    {
-        const Xml::Document hhcXml{ string {hhcFileContent} };
-        hhcFileContent.clear();
-        if (TryGetPathFromHhcObjects(chmFile, hhcXml, isParamTagIndicatesNameObject, isParamTagWithCoverPath, outBitmap, outAlphaType))
-			return true;        
-    }
-
-    return false;
-}
-
-bool TryGetPathFromHhcObjects(chm_file& chmFile, const Xml::Document& hhcXml,
-    const function<bool(const string&)>& isParamTagIndicatesCoverObject,
-    const function<bool(const string&)>& isParamTagWithCoverPath,
-    HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType)
-{
     string elementContent;
     const string objectElementName{ "object" };
-    for (size_t elementSearchOffset = 0, contentOffset = 0; hhcXml.GetElementContent("object", elementSearchOffset, elementContent, &contentOffset); elementSearchOffset += elementContent.size())
+    for (size_t elementSearchOffset = 0, contentOffset = 0, count = 0; hhcXml.GetElementContent("object", elementSearchOffset, elementContent, &contentOffset); elementSearchOffset += elementContent.size(), ++count)
     {
         elementSearchOffset = contentOffset;
         const Xml::Document hhcObjectXml{ string {elementContent} }; //CAUTION! Do not inline! Possible bug in VS2022.
-        if (TryGetPathFromHhcObject(chmFile, hhcObjectXml, isParamTagIndicatesCoverObject, isParamTagWithCoverPath, outBitmap, outAlphaType))
+        if (TryGetPathFromHhcObject(chmFile, hhcObjectXml, count < 2 ? isParamTagIndicatesNameObject : isParamTagIndicatesCoverObject, isParamTagWithCoverPath, outBitmap, outAlphaType))
             return true;
     }
 
@@ -238,12 +251,12 @@ bool TryGetPathFromHhcObjects(chm_file& chmFile, const Xml::Document& hhcXml,
 
 bool TryGetPathFromHhcObject(chm_file& chmFile, const Xml::Document& hhcObjectXml, 
     const function<bool(const string&)>& isParamTagIndicatesCoverObject,
-    const function<bool(const string&)>& isParamTagWithCoverPath,
+    const function<bool(const string&)>& isParamTagWithCoverPath, 
     HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType)
 {
     string path, tag;
     vector<char> coverFileContent{};
-
+    
     if (!hhcObjectXml.ContainsTag("param", isParamTagIndicatesCoverObject) ||
         !hhcObjectXml.GetTag("param", tag, isParamTagWithCoverPath) ||
         !Xml::Document::GetTagAttribute(tag, "value", path))
@@ -260,11 +273,27 @@ bool TryGetPathFromHhcObject(chm_file& chmFile, const Xml::Document& hhcObjectXm
     return false;
 }
 
+bool TryGetCoverByFileName(chm_file& chmFile, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType)
+{
+    return TryGetCoverBitmap(chmFile, outBitmap, outAlphaType, [&](const string& path) -> bool
+    {
+        if (!StrLib::EndsWith(path, ImageFileExtensions))
+            return false;
+        const auto pathWithoutExtension = Utility::TrimPathExtension(path);
+        return !StrLib::EndsWith(pathWithoutExtension, CoverImageFileNotEnds) && StrLib::ContainsCiOneOf(pathWithoutExtension, CoverImageFileContains);
+    });
+}
+
+bool TryGetCoverFromFirstHtml(chm_file& chmFile, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType)
+{
+    return TryGetCoverFromHtml(chmFile, HtmlExtensions, outBitmap, outAlphaType);
+}
+
 bool TryGetCoverByHtmlPath(chm_file& chmFile, const string& htmlFilePath, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType)
 {
     int fileIndex{ 0 };
     vector<char> xmlFileContent{};
-    if (!TryGetFileContent(chmFile, fileIndex, xmlFileContent, [&](const string& htmlPath) -> bool { return StrLib::EndsWith(htmlPath, htmlFilePath); }))
+    if (!TryGetFileEndsWithContent(chmFile, fileIndex, xmlFileContent, htmlFilePath))
         return false;
 
     const Xml::Document xml{ string {xmlFileContent} };
@@ -282,8 +311,11 @@ bool TryGetCoverFromImageTag(chm_file& chmFile, const Xml::Document& xml, HBITMA
         offset = tagOffset;
         if (!Xml::Document::GetTagAttribute(tag, "src", srcValue))
             continue;
-
         PreparePath(srcValue);
+        if (!StrLib::EndsWith(srcValue, ImageFileExtensions))
+            continue;
+        if (const auto pathWithoutExtension = Utility::TrimPathExtension(srcValue); StrLib::EndsWith(pathWithoutExtension, CoverImageFileNotEnds))
+            continue;
         if (StrLib::EndsWith(srcValue, ImageFileExtensions) &&
             TryGetCoverBitmap(chmFile, outBitmap, outAlphaType, [&](const string& path) -> bool { return StrLib::EndsWith(path, srcValue); }))
             return true;
@@ -294,21 +326,20 @@ bool TryGetCoverFromImageTag(chm_file& chmFile, const Xml::Document& xml, HBITMA
 
 void PreparePath(string& path)
 {
+    StrLib::Trim(path);
     StrLib::UnEscapeXml(path);
     StrLib::TrimStartCi(path, '.');
     StrLib::ReplaceAll(path, '\\', '/');
     StrLib::TrimStartCi(path, string{ "/.." });
-
-    const auto anchorOffset = path.find_last_of('#');
-    if (anchorOffset == string::npos)
-        return;
-    path.resize(anchorOffset);        
+    StrLib::ReplaceAll<char>(path, "%20", " ");
+    if (const auto anchorOffset = path.find_last_of('#'); anchorOffset != string::npos)
+        path.erase(anchorOffset);
 }
 
 bool TryGetCoverBitmap(chm_file& chmFile, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType, const function<bool(const string&)>& pathMatch)
 {
     vector<char> coverImage{};
-    for (int fileIndex{ 0 }; TryGetFileContent(chmFile, fileIndex, coverImage, pathMatch); fileIndex++)
+    for (int fileIndex{ 0 }; TryGetFileMatchContent(chmFile, fileIndex, coverImage, pathMatch); fileIndex++)
     {
         if (TryLoadBitmap(coverImage, outBitmap, outAlphaType))
             return true;
@@ -317,18 +348,78 @@ bool TryGetCoverBitmap(chm_file& chmFile, HBITMAP& outBitmap, WTS_ALPHATYPE& out
     return false;
 }
 
-bool TryGetFileContent(chm_file& chmFile, int& fileIndex, vector<char>& outFileContent, const function<bool(const string&)>& pathMatch)
+bool TryGetCoverFromHtml(chm_file& chmFile, const vector<string>& endsWithStrings, HBITMAP& outBitmap, WTS_ALPHATYPE& outAlphaType)
 {
-    for (int entryIndex = fileIndex; entryIndex < chmFile.n_entries; entryIndex++)
+    vector<char> htmlFileContent{};
+    const auto filesCount{ chmFile.n_entries };
+    for (const auto& endsWith : endsWithStrings)
     {
-        if (const auto entry = chmFile.entries[entryIndex];
-            !pathMatch(string{ entry->path }) || 
-            !TryReadFile(chmFile, *entry, outFileContent))
-	        continue;
-        fileIndex = entryIndex;
-        return true;
+        for (int fileIndex{ 0 }; fileIndex < filesCount; ++fileIndex)
+        {
+            if (!TryGetFileEndsWithContent(chmFile, fileIndex, htmlFileContent, endsWith))
+                continue;
+
+            const Xml::Document html{ string {htmlFileContent} };
+            htmlFileContent.clear();
+
+            if (TryGetCoverFromImageTag(chmFile, html, outBitmap, outAlphaType))
+                return true;
+        }
     }
 
+    return false;
+}
+
+bool TryGetFileMatchContent(chm_file& chmFile, int& fileIndex, vector<char>& outFileContent, const function<bool(const string&)>& pathMatch)
+{
+    chm_entry* entry = nullptr;
+    size_t depthCount{ SIZE_MAX };
+    for (int entryIndex = fileIndex; entryIndex < chmFile.n_entries; entryIndex++)
+    {
+	    const auto currentEntry = chmFile.entries[entryIndex];
+        if (!pathMatch(string{ currentEntry->path }))
+            continue;
+
+    	const size_t currentDepthCount = ranges::count_if(string{ currentEntry->path }, [](const char ch) {return ch == '/'; });
+        if (entry != nullptr && currentDepthCount >= depthCount)
+            continue;
+
+        fileIndex = entryIndex;
+        depthCount = currentDepthCount;
+        entry = currentEntry;
+    }
+
+    if (entry != nullptr)
+        return TryReadFile(chmFile, *entry, outFileContent);
+
+    fileIndex = chmFile.n_entries;
+    return false;
+}
+
+bool TryGetFileEndsWithContent(chm_file& chmFile, int& fileIndex, vector<char>& outFileContent, const string& endsWith)
+{
+    chm_entry* entry = nullptr;
+    size_t depthCount{ SIZE_MAX };
+    for (int entryIndex = fileIndex; entryIndex < chmFile.n_entries; entryIndex++)
+    {
+        const auto currentEntry = chmFile.entries[entryIndex];
+        const string path{ currentEntry->path };
+        if (!StrLib::EndsWith(path, endsWith))
+            continue;
+
+        const size_t currentDepthCount = ranges::count_if(path, [](const char ch) {return ch == '/'; });
+        if (entry != nullptr && currentDepthCount >= depthCount)
+            continue;
+
+        fileIndex = entryIndex;
+        depthCount = currentDepthCount;
+        entry = currentEntry;
+    }
+
+    if (entry != nullptr)
+        return TryReadFile(chmFile, *entry, outFileContent);
+
+	fileIndex = chmFile.n_entries;
     return false;
 }
 
@@ -389,116 +480,3 @@ int64_t IStreamReader(void* ctxPtr, void* buffer, const int64_t offset, const in
 
     return bytesRead;
 }
-
-
-////////////////////////////////////////////////////////
-/// UTILITY
-///
-
-
-
-
-/*
-
-HRESULT ReadFile(void* data, const int64_t dataSize)
-{
-    mem_reader_ctx ctx{};
-    mem_reader_init(&ctx, data, dataSize);
-
-    chm_file chmFile;
-    if (!chm_parse(&chmFile, fd_reader, &ctx))
-        return E_FAIL;
-
-    printf("%s:\n", path);
-    std::codecvt_base::ok = extract(&chmFile, base_path);
-
-	chm_close(&chmFile);
-    return S_OK;
-}
-
-static bool extract_entry(chm_file* chmFile, chm_entry* chmEntry, const char* basePath);
-
-static HRESULT FindEntry(chm_file* chmFile, const std::string& fileName)
-{
-    for (int entryIndex = 0; entryIndex < chmFile->n_entries; entryIndex++)
-    {
-        if (!extract_entry(chmFile, chmFile->entries[entryIndex], basePath))
-            return false;
-    }
-
-    return !chmFile->parse_entries_failed;
-}
-
-static bool extract(chm_file* chmFile, const char* basePath)
-{
-    // extract as many entries as possible
-    for (int entryIndex = 0; entryIndex < chmFile->n_entries; entryIndex++)
-    {
-        if (!extract_entry(chmFile, chmFile->entries[entryIndex], basePath))
-            return false;
-    }
-
-    return !chmFile->parse_entries_failed;
-}
-
-static bool extract_entry(chm_file* chmFile, chm_entry* chmEntry, const char* basePath)
-{
-    int64_t pathLen;
-    char buffer[32768];
-    char* i;
-
-    if (chmEntry->path[0] != '/')
-        return true;
-
-    // quick hack for security hole mentioned by Sven Tantau
-    if (strstr(chmEntry->path, "/../") != NULL) {
-        // fprintf(stderr, "Not extracting %s (dangerous path)\n", ui->path);
-        return true;
-    }
-
-    if (snprintf(buffer, sizeof(buffer), "%s%s", basePath, chmEntry->path) > 1024) {
-        return false;
-    }
-
-    // Get the length of the path
-    pathLen = strlen(chmEntry->path) - 1;
-
-    if (chmEntry->path[pathLen] == '/') {
-        // this is directory
-        return rmkdir(buffer) != -1;
-    }
-
-    // this is file
-    FILE* fout;
-
-    printf("--> %s\n", chmEntry->path);
-    if ((fout = fopen(buffer, "wb")) == NULL) {
-        // make sure that it isn't just a missing directory before we abort
-        char newbuf[32768];
-        strcpy(newbuf, buffer);
-        i = strrchr(newbuf, '/');
-        *i = '\0';
-        rmkdir(newbuf);
-        if ((fout = fopen(buffer, "wb")) == NULL)
-            return false;
-    }
-
-    auto remain = chmEntry->length;
-    int64_t offset = 0;
-	while (remain != 0) 
-    {
-        const auto len = chm_retrieve_entry(chmFile, chmEntry, reinterpret_cast<uint8_t*>(buffer), offset, sizeof buffer);
-        if (len <= 0)
-            return false; //fprintf(stderr, "incomplete file: %s\n", chmEntry->path);
-                
-        fwrite(buffer, 1, static_cast<size_t>(len), fout);
-        offset += len;
-        remain -= len;        
-    }
-
-    fclose(fout);
-    return true;
-}
-
-
-*/

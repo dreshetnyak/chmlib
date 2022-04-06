@@ -12,6 +12,9 @@ namespace StrLib
     wstring ToWstring(const string& multiByteString);
     wstring ToWstring(LPCCH multiByteString, int size);
     void UnEscapeXml(string& str);
+    void TrimStart(string& str);
+    void TrimEnd(string& str);
+    void Trim(string& str);
 
     inline int ToLower(const int ch) { return (ch > 64 && ch < 91) ? (ch + 32) : ch; }
 
@@ -244,8 +247,8 @@ namespace StrLib
 
         str.resize(static_cast<size_t>(0));
     }
-
-    template<typename T>
+    
+	template<typename T>
     vector<basic_string<T>> Split(const basic_string<T>& str, T splitCh, const bool preserveEmpty = false)
     {
         vector<basic_string<T>> splitStr;
