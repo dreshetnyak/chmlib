@@ -69,12 +69,15 @@ vector<string> OtherTocFileNames
     "content.html",
     "content.htm",
     "index.html",
-    "index.htm"
+    "index.htm",
+    "start.html",
+    "start.htm"
 };
 
 vector<string> CoverImageFileEnds
 {
     "_xs",
+    "_cover",
     "/cover",
     "/cover_01"
 };
@@ -109,6 +112,8 @@ int main()
 	const auto searchPath{ "R:\\TEMP\\CHM" };
     const auto imagePath{ L"R:\\TEMP\\IMG" };
 #endif
+
+    const auto startTime = std::chrono::steady_clock::now();
     for (const auto& entry : filesystem::directory_iterator(searchPath))
     {
         if (entry.is_directory())
@@ -143,10 +148,11 @@ int main()
         DeleteObject(bitmap);
         std::wcout << L"\r[OK]: " << filePath << endl;
     }
+    const auto finishTime = std::chrono::steady_clock::now();
 
     CoUninitialize();
-   
-    std::cout << "Done.\n";
+
+	std::cout << "Done. Elapsed: " << std::chrono::duration_cast<std::chrono::milliseconds> (finishTime - startTime).count() << " ms." << endl;
     return 0;
 }
 
@@ -157,11 +163,11 @@ bool TryGetCoverBitmap(IStream *stream, HBITMAP& outBitmap, WTS_ALPHATYPE& outAl
     if (!chm_parse(&chmFile, IStreamReader, &ctx))
         return false;
 
-	// Find an image file with the name that ends with _xs, those files are usually the cover images
+    // Find an image file with the name that ends with _xs, those files are usually the cover images
     if (TryGetCoverFromXsFile(chmFile, outBitmap, outAlphaType))
         return true;
 
-    // Locate toc.html/toc.htm file get the first image that looks like a cover
+	// Locate toc.html/toc.htm file get the first image that looks like a cover
     if (TryGetCoverFromToc(chmFile, outBitmap, outAlphaType))
         return true;
 
